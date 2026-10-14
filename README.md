@@ -1,10 +1,10 @@
 # 🚀 pyLBA: Linear Ballistic Accumulator Models in Python
 
-<p align="center"><img src="logo/pylba.svg" width="300" height="300" alt="pyLBA logo: two linear ballistic accumulators with animated drift samples"></p>
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/release/python-380/)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/nuttidalab/pyLBA/actions)
+
+<p align="center"><img src="logo/pylba.svg" width="300" height="300" alt="pyLBA logo: two linear ballistic accumulators with animated drift samples"></p>
 
 A Python package for fitting and simulating Linear Ballistic Accumulator (LBA) models and other accumulator models commonly used in cognitive psychology and neuroscience.
 
