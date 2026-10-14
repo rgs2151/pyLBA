@@ -1,16 +1,16 @@
 """
 Generic synthetic data generator for accumulator models.
 """
+
 import numpy as np
 import pandas as pd
-from .utils import broadcast_parameters
+from .utils import broadcast_parameters, infer_n_acc
 from .models.linear_ballistic_accumulator import LBAParameters
 
-def generate_LBA(n_trials: int, 
-                 parameters: LBAParameters, 
-                 n_acc: int = 1, 
-                 seed: int = None
-    ) -> pd.DataFrame:
+
+def generate_LBA(
+    n_trials: int, parameters: LBAParameters, n_acc: int = None, seed: int = None
+) -> pd.DataFrame:
     """
     Generate synthetic response time and choice data for an accumulator model.
 
@@ -30,6 +30,13 @@ def generate_LBA(n_trials: int,
     pd.DataFrame
         DataFrame with columns 'rt' and 'response'.
     """
+    if not isinstance(n_trials, (int, np.integer)) or n_trials < 0:
+        raise ValueError("n_trials must be a non-negative integer")
+    if not parameters.validate():
+        raise ValueError(
+            "Require finite parameters with A > 0, b > A, s > 0 and tau >= 0"
+        )
+    n_acc = infer_n_acc(parameters, n_acc=n_acc)
     rng = np.random.default_rng(seed)
 
     # Broadcast parameters to shape [n_acc]
@@ -39,20 +46,16 @@ def generate_LBA(n_trials: int,
     # Uniform start-points
     k = rng.random((n_acc, n_trials)) * A_arr[:, None]
 
-    # Prepare full-shape loc/scale for drifts
-    loc_mat = np.tile(v_arr[:, None], (1, n_trials))
-    scale_mat = np.tile(s_arr[:, None], (1, n_trials))
+    from scipy.stats import truncnorm
 
-    # Draw drifts truncated at zero
-    d = rng.normal(loc=loc_mat, scale=scale_mat)
-    mask = d <= 0
-    while mask.any():
-        d[mask] = rng.normal(
-            loc=loc_mat[mask],
-            scale=scale_mat[mask],
-            size=mask.sum()
-        )
-        mask = d <= 0
+    d = truncnorm.rvs(
+        -v_arr[:, None] / s_arr[:, None],
+        np.inf,
+        loc=v_arr[:, None],
+        scale=s_arr[:, None],
+        size=(n_acc, n_trials),
+        random_state=rng,
+    )
 
     # Finish times
     T = tau_arr[:, None] + (b_arr[:, None] - k) / d
@@ -61,7 +64,4 @@ def generate_LBA(n_trials: int,
     rt = T.min(axis=0)
     resp = T.argmin(axis=0)
 
-    return pd.DataFrame({
-        'rt': rt.astype('float32'),
-        'response': resp.astype('int32')
-    })
+    return pd.DataFrame({"rt": rt.astype("float64"), "response": resp.astype("int32")})

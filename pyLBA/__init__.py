@@ -1,7 +1,7 @@
 """
 pyLBA: A Python package for Linear Ballistic Accumulator and other accumulator models.
 
-This package provides a unified interface for fitting and simulating various 
+This package provides a unified interface for fitting and simulating various
 accumulator models used in cognitive psychology and neuroscience.
 """
 
@@ -17,8 +17,9 @@ __email__ = "rgs2151@columbia.com"
 __all__ = [
     "LBAModel",
     "LBAParameters",
-    "AccumulatorModel", 
+    "AccumulatorModel",
     "ModelParameters",
+    "Parameter",
     "MCMCFitter",
-    "EMFitter"
+    "EMFitter",
 ]

@@ -4,8 +4,13 @@ include CONTRIBUTING.md
 include requirements.txt
 include MANIFEST.in
 recursive-include pyLBA *.py
-recursive-include tests *.py
 recursive-include examples *.py
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 recursive-exclude * .DS_Store
+
+recursive-include docs *.rst *.py
+prune docs/_build
+recursive-include examples *.ipynb
+
+recursive-include logo *.svg

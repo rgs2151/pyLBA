@@ -1,164 +1,78 @@
-"""
-Fitting methods for accumulator models.
-"""
+"""Bayesian fitting for accumulator models."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union
 import numpy as np
-import pandas as pd
 import pymc as pm
 import pytensor.tensor as pt
-from .core.accumulator import AccumulatorModel
-from .core.parameters import ModelParameters
+from .utils import validate_data
 
 
 class BaseFitter(ABC):
-    """Base class for model fitting."""
-    
-    def __init__(self, model: AccumulatorModel):
+    """Base interface for model fitters."""
+
+    def __init__(self, model):
         self.model = model
-    
+
     @abstractmethod
-    def fit(self, data: pd.DataFrame, **kwargs):
-        """Fit the model to data."""
-        pass
+    def fit(self, data, **kwargs):
+        """Fit a model to response-time and choice data."""
 
 
 class MCMCFitter(BaseFitter):
     """MCMC fitting using PyMC."""
-    
-    def fit(self, 
-            data: pd.DataFrame, 
-            draws: int = 1000,
-            tune: int = 1000,
-            chains: int = 4,
-            cores: int = 4,
-            progressbar: bool = True,
-            priors: Optional[Dict[str, Any]] = None,
-            **kwargs):
+
+    def fit(
+        self,
+        data,
+        draws=1000,
+        tune=1000,
+        chains=4,
+        cores=4,
+        progressbar=True,
+        priors=None,
+        n_acc=None,
+        **kwargs,
+    ):
+        """Sample the posterior and return ArviZ InferenceData.
+
+        ``priors`` maps parameter names to fixed numeric values or callables
+        ``(name, n_acc)`` creating PyMC variables inside the fitting model.
+        ``n_acc`` defaults to the largest response label plus one. Set it
+        explicitly when higher-numbered choices are absent from the data.
+        Remaining keyword arguments are forwarded to ``pymc.sample``.
         """
-        Fit model using MCMC sampling.
-        
-        Parameters
-        ----------
-        data : pd.DataFrame
-            Data with columns 'rt' and 'response'
-        draws : int, default=1000
-            Number of draws from posterior
-        tune : int, default=1000
-            Number of tuning steps
-        chains : int, default=4
-            Number of chains
-        cores : int, default=4
-            Number of cores to use
-        progressbar : bool, default=True
-            Show progress bar
-        priors : dict, optional
-            Prior distributions for parameters
-        **kwargs
-            Additional arguments passed to pm.sample
-            
-        Returns
-        -------
-        InferenceData
-            PyMC trace object
-        """
-        rt = data['rt'].to_numpy()
-        response = data['response'].to_numpy()
-        
-        # Infer number of accumulators
-        n_acc = len(np.unique(response))
-        
-        with pm.Model() as graph:
-            # Create parameter variables with priors
-            param_vars = self._create_priors(n_acc, priors)
-            
-            # Create parameter object
-            parameters = self.model.get_parameter_class()(**param_vars)
-            
-            # Calculate likelihood
-            p = self.model.pdf(rt, response, parameters)
-            logp = pt.sum(pt.log(p + 1e-12))
-            
-            pm.Potential('likelihood', logp)
-            
-            # Sample
+        validate_data(data)
+        rt = data["rt"].to_numpy(dtype=float)
+        response = data["response"].to_numpy(dtype="int64")
+        observed = int(response.max()) + 1
+        if n_acc is None:
+            n_acc = observed
+        if not isinstance(n_acc, (int, np.integer)) or n_acc < observed:
+            raise ValueError("n_acc must include every observed response label")
+        if kwargs.get("return_inferencedata") is False:
+            raise ValueError("Fitting requires return_inferencedata=True")
+        with pm.Model():
+            values = self.model.get_default_priors(
+                n_acc, priors=priors, rt_min=float(rt.min())
+            )
+            parameters = self.model.get_parameter_class()(**values)
+            p = self.model.pdf(rt, response, parameters, n_acc=n_acc)
+            pm.Potential("likelihood", pt.sum(pt.log(p)))
             trace = pm.sample(
                 draws=draws,
                 tune=tune,
                 chains=chains,
                 cores=cores,
                 progressbar=progressbar,
-                **kwargs
+                **kwargs,
             )
-            
+        trace.attrs["n_acc"] = int(n_acc)
         return trace
-    
-    def _create_priors(self, n_acc: int, priors: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Create prior distributions for model parameters."""
-        if priors is None:
-            priors = {}
-        
-        # Check if model has default priors method
-        if hasattr(self.model, 'get_default_priors'):
-            default_priors = self.model.get_default_priors(n_acc)
-        else:
-            # Generic default priors
-            param_class = self.model.get_parameter_class()
-            param_fields = param_class._fields
-            default_priors = {}
-            
-            for field in param_fields:
-                default_priors[field] = pm.Uniform(field, lower=0, upper=50, shape=n_acc)
-        
-        # Override with user-specified priors
-        param_vars = {}
-        for field, default_prior in default_priors.items():
-            if field in priors:
-                param_vars[field] = priors[field]
-            else:
-                param_vars[field] = default_prior
-        
-        return param_vars
 
 
 class EMFitter(BaseFitter):
-    """Expectation-Maximization fitting."""
-    
-    def fit(self, data: pd.DataFrame,
-            max_iter: int = 100,
-            tol: float = 1e-6,
-            init_params: Optional[ModelParameters] = None,
-            **kwargs) -> ModelParameters:
-        """
-        Fit model using Expectation-Maximization.
-        
-        Parameters
-        ----------
-        data : pd.DataFrame
-            Data with columns 'rt' and 'response'
-        max_iter : int, default=100
-            Maximum number of iterations
-        tol : float, default=1e-6
-            Convergence tolerance
-        init_params : ModelParameters, optional
-            Initial parameter values
-        **kwargs
-            Additional arguments
-            
-        Returns
-        -------
-        ModelParameters
-            Fitted parameters
-        """
-        # EM implementation would go here
-        # For now, this is a placeholder
+    """Expectation-Maximization interface."""
+
+    def fit(self, data, **kwargs):
+        """Raise NotImplementedError; EM fitting is not implemented."""
         raise NotImplementedError("EM fitting not yet implemented")
-    
-    def _e_step(self, data: pd.DataFrame, parameters: ModelParameters):
-        """Expectation step."""
-        pass
-    
-    def _m_step(self, data: pd.DataFrame, responsibilities):
-        """Maximization step."""
-        pass
